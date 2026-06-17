@@ -6,7 +6,14 @@ import pandas as pd
 import streamlit as st
 
 import data_service
-from auth import is_site_auth_enabled, is_write_enabled, verify_site_password, verify_write_key
+from auth import (
+    get_public_base_url,
+    is_site_auth_enabled,
+    is_write_enabled,
+    reload_config,
+    verify_site_password,
+    verify_write_key,
+)
 from import_parsers import parse_upload
 from schema import validate_actor
 from visit_stats import load_visit_stats, record_session_visit
@@ -16,8 +23,8 @@ APP_TAGLINE = "Online Database"
 AUTHOR_NAME = "KaffeeCat"
 AUTHOR_URL = os.environ.get("AUTHOR_URL", "https://github.com/KaffeeCat").rstrip("/")
 DEFAULT_PORT = os.environ.get("STREAMLIT_SERVER_PORT", "8501")
-PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
 
+reload_config()
 data_service.initialize()
 
 
@@ -43,14 +50,17 @@ def clear_data_caches() -> None:
 
 
 def get_app_base_url() -> str:
-    if PUBLIC_BASE_URL:
-        return PUBLIC_BASE_URL
+    configured = get_public_base_url()
+    if configured:
+        return configured.rstrip("/")
     try:
         headers = st.context.headers
         if headers:
             host = headers.get("Host")
-            proto = headers.get("X-Forwarded-Proto", "http")
             if host:
+                if host.endswith(".streamlit.app") or host.endswith(".streamlit.io"):
+                    return f"https://{host}"
+                proto = headers.get("X-Forwarded-Proto", "https")
                 return f"{proto}://{host}"
     except Exception:
         pass
@@ -196,7 +206,7 @@ def render_sidebar(visit_stats: dict) -> str:
             st.session_state.write_authorized = verify_write_key(write_key)
 
         if not is_write_enabled():
-            st.warning("Read-only mode: WRITE_API_KEY is not configured")
+            st.warning("Read-only mode: WRITE_API_KEY / WRITE_API_KEY_HASH is not configured")
         elif st.session_state.write_authorized:
             st.success("Write Key verified")
         elif write_key:

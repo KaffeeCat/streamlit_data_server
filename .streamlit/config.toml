@@ -1,2 +1,6 @@
 [server]
 maxMessageSize = 500
+headless = true
+
+[browser]
+gatherUsageStats = false
