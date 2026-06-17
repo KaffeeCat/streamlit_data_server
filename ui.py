@@ -17,6 +17,7 @@ from auth import (
 from import_parsers import parse_upload
 from schema import validate_actor
 from visit_stats import load_visit_stats, record_session_visit
+from system_stats import collect_system_stats, format_bytes, format_uptime
 
 APP_NAME = "Streamlit Data Server"
 APP_TAGLINE = "Online Database"
@@ -493,6 +494,103 @@ def render_recent_tab() -> None:
             st.caption(f"File: {entry['source_filename']}")
 
 
+def render_server_tab() -> None:
+    st.subheader("Server")
+    st.caption("Hardware configuration and live resource usage for this instance.")
+
+    auto_refresh = st.checkbox("Auto-refresh every 5s", key="server_auto_refresh")
+    if not auto_refresh and st.button("Refresh", type="primary", key="server_refresh"):
+        pass
+
+    if auto_refresh:
+        _render_server_metrics_fragment()
+    else:
+        _render_server_metrics()
+
+
+@st.fragment(run_every=5)
+def _render_server_metrics_fragment() -> None:
+    _render_server_metrics()
+
+
+def _render_server_metrics() -> None:
+    stats = collect_system_stats()
+    hw = stats["hardware"]
+    use = stats["usage"]
+
+    if not stats["psutil_available"]:
+        st.warning("Install `psutil` to enable server metrics.")
+        return
+
+    st.markdown("#### Hardware")
+    h1, h2, h3, h4 = st.columns(4)
+    h1.metric("OS", f"{hw['system']} {hw['release']}")
+    h2.metric("Architecture", hw["machine"])
+    h3.metric("CPU cores", f"{hw['cpu_count_logical']} logical")
+    h4.metric("RAM total", format_bytes(hw["memory_total_bytes"]))
+
+    spec_items = [
+        ("Hostname", hw["hostname"]),
+        ("Processor", hw["processor"]),
+        (
+            "Physical / logical CPUs",
+            f"{hw['cpu_count_physical']} / {hw['cpu_count_logical']}",
+        ),
+        ("Python", hw["python_version"]),
+        ("Platform", hw["version"][:80] + ("…" if len(hw["version"]) > 80 else "")),
+    ]
+    spec_html = "".join(
+        f"<tr><td style='padding:0.35rem 0.75rem 0.35rem 0;color:rgba(128,128,128,0.95);"
+        f"white-space:nowrap;'>{html.escape(k)}</td>"
+        f"<td style='padding:0.35rem 0;'>{html.escape(str(v))}</td></tr>"
+        for k, v in spec_items
+    )
+    _render_html(
+        f"""
+        {_card_open()}
+        <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">{spec_html}</table>
+        {CARD_CLOSE}
+        """
+    )
+
+    st.markdown("#### Usage")
+    u1, u2, u3, u4 = st.columns(4)
+    cpu_pct = use["cpu_percent"]
+    mem_pct = use["memory_percent"]
+    u1.metric("CPU", f"{cpu_pct:.1f}%" if cpu_pct is not None else "—")
+    u2.metric(
+        "Memory",
+        f"{format_bytes(use['memory_used_bytes'])} / {format_bytes(use['memory_total_bytes'])}",
+    )
+    u3.metric("This process", format_bytes(use["process_memory_bytes"]))
+    u4.metric("Uptime", format_uptime(use["uptime_seconds"]))
+
+    if cpu_pct is not None:
+        st.caption(f"CPU usage · {cpu_pct:.1f}%")
+        st.progress(min(max(cpu_pct / 100, 0.0), 1.0))
+    if mem_pct is not None:
+        st.caption(f"Memory usage · {mem_pct:.1f}%")
+        st.progress(min(max(mem_pct / 100, 0.0), 1.0))
+
+    proc_cpu = use.get("process_cpu_percent")
+    if proc_cpu is not None:
+        st.caption(f"App process CPU · {proc_cpu:.1f}%")
+
+    if stats["disks"]:
+        st.markdown("#### Disk")
+        for disk in stats["disks"]:
+            label = "Data directory" if disk["path"] == stats["data_dir"] else "App directory"
+            st.caption(
+                f"{label} · `{disk['path']}` · "
+                f"{format_bytes(disk['used_bytes'])} / {format_bytes(disk['total_bytes'])} "
+                f"({disk['percent']:.1f}%)"
+            )
+            st.progress(min(max(disk["percent"] / 100, 0.0), 1.0))
+
+    if use.get("collected_at_utc"):
+        st.caption(f"Last updated · {use['collected_at_utc'][:19].replace('T', ' ')} UTC")
+
+
 st.set_page_config(
     page_title=APP_NAME,
     page_icon="🗄️",
@@ -507,7 +605,9 @@ visit_stats = track_visit()
 current_db = render_sidebar(visit_stats)
 render_page_header()
 
-tab_upload, tab_tables, tab_sql, tab_recent = st.tabs(["Upload", "Tables", "SQL", "Recent"])
+tab_upload, tab_tables, tab_sql, tab_recent, tab_server = st.tabs(
+    ["Upload", "Tables", "SQL", "Recent", "Server"]
+)
 
 with tab_upload:
     render_upload_tab(current_db)
@@ -517,3 +617,5 @@ with tab_sql:
     render_sql_tab(current_db)
 with tab_recent:
     render_recent_tab()
+with tab_server:
+    render_server_tab()

@@ -200,7 +200,3 @@ def require_write_key(key: Optional[str]) -> None:
 
 def get_public_base_url() -> str:
     return get_config("PUBLIC_BASE_URL")
-
-
-_load_streamlit_secrets()
-_load_local_env()
