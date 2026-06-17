@@ -9,7 +9,8 @@ import requests
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = PROJECT_ROOT / ".env"
 
-BASE_URL = os.environ.get("DATA_SERVER_URL", "http://localhost:8501").rstrip("/")
+DEFAULT_BASE_URL = "https://dbserver.streamlit.app"
+BASE_URL = os.environ.get("DATA_SERVER_URL", DEFAULT_BASE_URL).rstrip("/")
 DATABASE = os.environ.get("DATA_SERVER_DB", "default")
 ACTOR = os.environ.get("DATA_SERVER_ACTOR", "tutorial")
 
@@ -38,7 +39,7 @@ def api_url(path: str) -> str:
 
 
 def site_headers() -> dict[str, str]:
-    headers: dict[str, str] = {}
+    headers: dict[str, str] = {"Accept": "application/json"}
     if SITE_PASSWORD:
         headers["X-Site-Password"] = SITE_PASSWORD
     return headers
@@ -53,13 +54,32 @@ def write_headers() -> dict[str, str]:
 
 
 def check_response(resp: requests.Response, action: str) -> dict:
+    if 300 <= resp.status_code < 400:
+        location = resp.headers.get("Location", "")
+        raise RuntimeError(
+            f"{action} failed: HTTP {resp.status_code} redirect "
+            f"(ensure Streamlit Cloud app is Public). Location: {location[:120]}"
+        )
     try:
         body = resp.json()
     except ValueError:
-        resp.raise_for_status()
-        raise RuntimeError(f"{action} failed: non-JSON response") from None
+        hint = ""
+        text = resp.text.lstrip()
+        if text.startswith("<!") or text.startswith("<a "):
+            hint = " (got HTML — API request did not reach the server; retry or check Cloud visibility)"
+        raise RuntimeError(f"{action} failed: non-JSON response{hint}") from None
 
     if not resp.ok or not body.get("ok"):
         error = body.get("error") or resp.text
         raise RuntimeError(f"{action} failed ({resp.status_code}): {error}")
     return body["data"]
+
+
+def api_request(method: str, path: str, **kwargs) -> requests.Response:
+    kwargs.setdefault("timeout", 30)
+    return requests.request(
+        method,
+        api_url(path),
+        allow_redirects=False,
+        **kwargs,
+    )

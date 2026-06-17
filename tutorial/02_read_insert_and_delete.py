@@ -1,9 +1,8 @@
 """
 示例 2：读取表、插入新行、删除指定行
 
-前置条件：
-  - 已运行 01_create_table_and_write.py（表 tutorial_products 存在）
-  - 本地服务已启动
+默认连接线上服务 https://dbserver.streamlit.app
+前置条件：已运行 01_create_table_and_write.py（表 tutorial_products 存在）
 
 运行：
   python tutorial/02_read_insert_and_delete.py
@@ -15,39 +14,37 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import requests
-
-from config import ACTOR, DATABASE, api_url, check_response, site_headers, write_headers
+from config import ACTOR, DATABASE, api_request, check_response, site_headers, write_headers
 
 TABLE = "tutorial_products"
 
 
 def list_rows(*, limit: int = 20) -> dict:
-    resp = requests.get(
-        api_url(f"/api/databases/{DATABASE}/tables/{TABLE}/rows"),
+    resp = api_request(
+        "GET",
+        f"/api/databases/{DATABASE}/tables/{TABLE}/rows",
         headers=site_headers(),
         params={"limit": limit, "order": "asc"},
-        timeout=30,
     )
     return check_response(resp, "读取表")
 
 
 def insert_row(row: dict) -> dict:
-    resp = requests.post(
-        api_url(f"/api/databases/{DATABASE}/tables/{TABLE}/rows"),
+    resp = api_request(
+        "POST",
+        f"/api/databases/{DATABASE}/tables/{TABLE}/rows",
         headers=write_headers(),
         json={"actor": ACTOR, **row},
-        timeout=30,
     )
     return check_response(resp, "插入新行")
 
 
 def delete_row(row_id: int) -> dict:
-    resp = requests.delete(
-        api_url(f"/api/databases/{DATABASE}/tables/{TABLE}/rows/{row_id}"),
+    resp = api_request(
+        "DELETE",
+        f"/api/databases/{DATABASE}/tables/{TABLE}/rows/{row_id}",
         headers=write_headers(),
         json={"actor": ACTOR},
-        timeout=30,
     )
     return check_response(resp, f"删除 _rowid={row_id}")
 

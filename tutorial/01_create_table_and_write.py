@@ -1,9 +1,8 @@
 """
 示例 1：创建表并写入示例数据
 
-前置条件：
-  - 本地服务已启动: python -m streamlit run app.py
-  - .env 中已配置 WRITE_API_KEY
+默认连接线上服务 https://dbserver.streamlit.app
+前置条件：项目根目录 .env 中已配置 SITE_PASSWORD 和 WRITE_API_KEY
 
 运行：
   python tutorial/01_create_table_and_write.py
@@ -15,9 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import requests
-
-from config import ACTOR, DATABASE, api_url, check_response, write_headers
+from config import ACTOR, DATABASE, api_request, check_response, write_headers
 
 TABLE = "tutorial_products"
 
@@ -36,8 +33,9 @@ SAMPLE_ROWS = [
 
 
 def create_table() -> dict:
-    resp = requests.post(
-        api_url(f"/api/databases/{DATABASE}/tables"),
+    resp = api_request(
+        "POST",
+        f"/api/databases/{DATABASE}/tables",
         headers=write_headers(),
         json={
             "name": TABLE,
@@ -46,17 +44,16 @@ def create_table() -> dict:
             "max_rows": 1000,
             "actor": ACTOR,
         },
-        timeout=30,
     )
     return check_response(resp, "建表")
 
 
 def insert_row(row: dict) -> dict:
-    resp = requests.post(
-        api_url(f"/api/databases/{DATABASE}/tables/{TABLE}/rows"),
+    resp = api_request(
+        "POST",
+        f"/api/databases/{DATABASE}/tables/{TABLE}/rows",
         headers=write_headers(),
         json={"actor": ACTOR, **row},
-        timeout=30,
     )
     return check_response(resp, f"插入 {row.get('sku')}")
 

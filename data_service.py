@@ -30,6 +30,19 @@ UPLOADS_DIR = BASE_DIR / "data" / "uploads"
 _write_lock = threading.RLock()
 _initialized = False
 
+_DEMO_TABLE = "demo_products"
+_DEMO_COLUMNS = [
+    {"name": "sku", "type": "TEXT"},
+    {"name": "name", "type": "TEXT"},
+    {"name": "price", "type": "REAL"},
+    {"name": "stock", "type": "INTEGER"},
+]
+_DEMO_ROWS = [
+    {"sku": "SKU-001", "name": "Wireless Mouse", "price": 29.9, "stock": 120},
+    {"sku": "SKU-002", "name": "Mechanical Keyboard", "price": 89.0, "stock": 45},
+    {"sku": "SKU-003", "name": "USB-C Hub", "price": 45.5, "stock": 80},
+]
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -126,6 +139,24 @@ def initialize() -> None:
                     description="Default database",
                 )
         _initialized = True
+    _seed_demo_table_if_empty()
+
+
+def _seed_demo_table_if_empty() -> None:
+    if os.environ.get("DISABLE_DEMO_SEED", "").strip().lower() in ("1", "true", "yes"):
+        return
+    if list_tables("default"):
+        return
+    create_table(
+        "default",
+        table_name=_DEMO_TABLE,
+        columns=_DEMO_COLUMNS,
+        actor="system",
+        max_rows=1000,
+        display_name="Demo Products",
+    )
+    for row in _DEMO_ROWS:
+        insert_row("default", _DEMO_TABLE, row, actor="system")
 
 
 def _create_database_unlocked(
