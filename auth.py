@@ -29,16 +29,38 @@ def _load_local_env() -> None:
             os.environ[key] = value
 
 
+def _load_secrets_toml(path: Path) -> None:
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key in _SECRET_KEYS and value and not os.environ.get(key, "").strip():
+            os.environ[key] = value
+
+
 def _load_streamlit_secrets() -> None:
+    base = Path(__file__).resolve().parent
+    for path in (
+        base / ".streamlit" / "secrets.toml",
+        Path(".streamlit/secrets.toml"),
+    ):
+        _load_secrets_toml(path)
+
     try:
         import streamlit as st
 
         for key in _SECRET_KEYS:
-            if key in os.environ and os.environ[key].strip():
+            if os.environ.get(key, "").strip():
                 continue
-            if key not in st.secrets:
+            try:
+                value = str(st.secrets[key]).strip()
+            except (KeyError, TypeError, AttributeError):
                 continue
-            value = str(st.secrets[key]).strip()
             if value:
                 os.environ[key] = value
     except Exception:
