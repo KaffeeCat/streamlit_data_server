@@ -29,9 +29,20 @@ def _load_local_env() -> None:
             os.environ[key] = value
 
 
-def _load_secrets_toml(path: Path) -> None:
+def _secrets_toml_paths() -> list[Path]:
+    base = Path(__file__).resolve().parent
+    cwd = Path.cwd()
+    return [
+        base / ".streamlit" / "secrets.toml",
+        cwd / ".streamlit" / "secrets.toml",
+        Path(".streamlit/secrets.toml"),
+    ]
+
+
+def _load_secrets_toml(path: Path) -> bool:
     if not path.is_file():
-        return
+        return False
+    loaded = False
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -39,16 +50,14 @@ def _load_secrets_toml(path: Path) -> None:
         key, _, value = line.partition("=")
         key = key.strip()
         value = value.strip().strip('"').strip("'")
-        if key in _SECRET_KEYS and value and not os.environ.get(key, "").strip():
+        if key in _SECRET_KEYS and value:
             os.environ[key] = value
+            loaded = True
+    return loaded
 
 
 def _load_streamlit_secrets() -> None:
-    base = Path(__file__).resolve().parent
-    for path in (
-        base / ".streamlit" / "secrets.toml",
-        Path(".streamlit/secrets.toml"),
-    ):
+    for path in _secrets_toml_paths():
         _load_secrets_toml(path)
 
     try:
@@ -68,13 +77,36 @@ def _load_streamlit_secrets() -> None:
 
 
 def reload_config() -> None:
-    _load_local_env()
     _load_streamlit_secrets()
+    _load_local_env()
+
+
+def config_status() -> dict:
+    reload_config()
+    paths = _secrets_toml_paths()
+    return {
+        "site_auth_enabled": is_site_auth_enabled(),
+        "write_enabled": is_write_enabled(),
+        "site_hash_configured": bool(get_config("SITE_PASSWORD_HASH")),
+        "write_hash_configured": bool(get_config("WRITE_API_KEY_HASH")),
+        "secrets_file_found": any(p.is_file() for p in paths),
+        "public_base_url": get_config("PUBLIC_BASE_URL"),
+    }
 
 
 def get_config(name: str) -> str:
     reload_config()
     return os.environ.get(name, "").strip()
+
+
+def is_site_auth_enabled() -> bool:
+    reload_config()
+    return bool(os.environ.get("SITE_PASSWORD", "").strip() or os.environ.get("SITE_PASSWORD_HASH", "").strip())
+
+
+def is_write_enabled() -> bool:
+    reload_config()
+    return bool(os.environ.get("WRITE_API_KEY", "").strip() or os.environ.get("WRITE_API_KEY_HASH", "").strip())
 
 
 def hash_secret(value: str, *, salt: str = "") -> str:
@@ -110,14 +142,6 @@ def _verify_secret(
     if stored_hash:
         return _verify_against_hash(value, stored_hash)
     return False
-
-
-def is_site_auth_enabled() -> bool:
-    return bool(get_config("SITE_PASSWORD") or get_config("SITE_PASSWORD_HASH"))
-
-
-def is_write_enabled() -> bool:
-    return bool(get_config("WRITE_API_KEY") or get_config("WRITE_API_KEY_HASH"))
 
 
 def verify_site_password(password: Optional[str]) -> bool:
@@ -178,4 +202,5 @@ def get_public_base_url() -> str:
     return get_config("PUBLIC_BASE_URL")
 
 
+_load_streamlit_secrets()
 _load_local_env()

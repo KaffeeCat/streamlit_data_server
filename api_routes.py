@@ -7,6 +7,7 @@ from starlette.routing import Route
 
 import data_service
 from auth import (
+    config_status,
     extract_site_password_from_headers,
     extract_write_key_from_headers,
     is_site_auth_enabled,
@@ -351,13 +352,7 @@ async def recent_uploads(request: Request) -> Response:
 
 
 async def health(request: Request) -> Response:
-    return _json_response(
-        {
-            "site_auth_enabled": is_site_auth_enabled(),
-            "write_enabled": is_write_enabled(),
-            "databases": len(data_service.list_databases()),
-        }
-    )
+    return _json_response(config_status() | {"databases": len(data_service.list_databases())})
 
 
 def build_api_routes() -> list[Route]:
