@@ -186,3 +186,4 @@ data/meta.sqlite3-*
 data/databases/
 data/uploads/
 data/visits.json
+.streamlit/cloud-secrets.toml
